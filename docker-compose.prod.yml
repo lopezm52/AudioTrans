@@ -1,0 +1,31 @@
+services:
+  audiotrans:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - API_KEY=${API_KEY:-audio-trans-secret-key-2024}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-100MB}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - temp_data:/tmp/audiotrans
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+volumes:
+  temp_data: 
