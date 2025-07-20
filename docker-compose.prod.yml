@@ -8,25 +8,26 @@ services:
     environment:
       - API_KEY=${API_KEY:-audio-trans-secret-key-2024}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_MODEL=${WHISPER_MODEL:-tiny}
       - MAX_FILE_SIZE=${MAX_FILE_SIZE:-100MB}
       - PORT=8001
       - PYTHONUNBUFFERED=1
     volumes:
       - temp_data:/tmp/audiotrans
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 60s
-      timeout: 30s
-      retries: 5
-      start_period: 120s
+    # Temporalmente desactivado para debugging
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+    #   interval: 60s
+    #   timeout: 30s
+    #   retries: 5
+    #   start_period: 120s
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
-          memory: 1G
+          memory: 1.5G
 
 volumes:
   temp_data: 
