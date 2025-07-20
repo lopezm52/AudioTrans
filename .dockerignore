@@ -1,0 +1,47 @@
+# Archivos de desarrollo
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Archivos de repositorio
+.git/
+.gitignore
+*.md
+!README.md
+
+# Archivos de prueba y desarrollo
+test_api.py
+verify_setup.py
+temp/
+*.m4a
+*.wav
+*.mp3
+# Excluir archivos de texto temporales pero NO requirements.txt
+*.txt
+!requirements.txt
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Docker
+Dockerfile.prod
+docker-compose*.yml
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.log
+
+# Archivos temporales
+*.tmp
+/tmp/ 
