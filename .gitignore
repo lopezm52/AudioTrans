@@ -35,7 +35,9 @@ temp/
 *.m4a
 *.wav
 *.mp3
+# Excluir archivos .txt pero permitir requirements.txt
 *.txt
+!requirements.txt
 
 # Logs
 *.log
