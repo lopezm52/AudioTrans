@@ -6,9 +6,9 @@ openai==0.28.1
 pydub==0.25.1
 python-dotenv==1.0.0
 
-# GPU optimizations and CUDA support
-torch==2.1.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-torchaudio==2.1.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+# GPU optimizations and CUDA 12.x support
+torch==2.5.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
+torchaudio==2.5.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
 # For better GPU performance and acceleration
 accelerate==0.24.1
