@@ -26,11 +26,11 @@ RUN pip install --upgrade pip setuptools wheel
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 
-# Install PyTorch with CUDA 12.x support first
-RUN pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
-
-# Install remaining requirements
+# Install requirements (pip will resolve PyTorch and dependencies automatically)
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install PyTorch with CUDA 12.x support (after other dependencies)
+RUN pip install --no-cache-dir torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121 --upgrade
 
 # Stage 2: Runtime image
 FROM nvidia/cuda:12.9.1-runtime-ubuntu22.04
