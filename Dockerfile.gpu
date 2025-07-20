@@ -61,9 +61,8 @@ RUN groupadd -r appuser && \
 USER appuser
 WORKDIR /app
 
-# Copy application code
+# Copy application code  
 COPY --chown=appuser:appuser app.py .
-COPY --chown=appuser:appuser .env* ./
 
 # GPU and performance environment variables
 ENV CUDA_VISIBLE_DEVICES=0

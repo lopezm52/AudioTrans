@@ -21,8 +21,14 @@ try:
 except ImportError:
     NVML_AVAILABLE = False
 
-# Cargar variables de entorno desde .env
-load_dotenv()
+# Cargar variables de entorno desde .env (solo en desarrollo)
+# En producción (Docker), usar variables de entorno nativas
+import os
+if os.path.exists('.env'):
+    load_dotenv()
+    print("🔧 Desarrollo: Cargando configuración desde .env")
+else:
+    print("☁️ Producción: Usando variables de entorno del sistema")
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
