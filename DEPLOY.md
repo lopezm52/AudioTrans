@@ -54,22 +54,22 @@ WHISPER_MODEL=medium
 MAX_FILE_SIZE=200MB
 
 # Puerto (Coolify lo asigna automáticamente)
-PORT=8000
+PORT=8001
 ```
 
 ### **Paso 4: Configuración de Red**
 
 1. **Configurar Puerto**
    ```
-   Internal Port: 8000
-   Public Port: [Auto-asignado por Coolify]
-   ```
+Internal Port: 8001
+Public Port: [Auto-asignado por Coolify]
+```
 
 2. **Health Check**
    ```
-   Health Check Path: /health
-   Health Check Port: 8000
-   ```
+Health Check Path: /health
+Health Check Port: 8001
+```
 
 ### **Paso 5: Configuración de Recursos**
 
@@ -120,7 +120,7 @@ sudo ufw allow 80
 sudo ufw allow 443
 
 # Para Coolify (si es necesario)
-sudo ufw allow 8000
+sudo ufw allow 8001
 ```
 
 ## 🚀 Proceso de Despliegue
@@ -169,7 +169,7 @@ sudo ufw allow 8000
    - Verifica que veas:
      ```
      ✅ Modelo Whisper 'medium' cargado exitosamente
-     INFO: Uvicorn running on http://0.0.0.0:8000
+     INFO: Uvicorn running on http://0.0.0.0:8001
      ```
 
 ## 🧪 Prueba de Producción

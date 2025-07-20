@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 # Configuración de la API
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8001"
 API_KEY = "Adaynoa27Audiotranscript2024"
 
 def test_health_check():
@@ -33,7 +33,7 @@ def test_health_check():
             print(f"❌ Error en health check: {response.status_code}")
             return False
     except requests.exceptions.ConnectionError:
-        print("❌ No se puede conectar a la API. ¿Está ejecutándose en http://localhost:8000?")
+        print("❌ No se puede conectar a la API. ¿Está ejecutándose en http://localhost:8001?")
         return False
     except Exception as e:
         print(f"❌ Error inesperado: {e}")

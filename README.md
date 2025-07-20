@@ -79,7 +79,7 @@ docker-compose up --build
 docker-compose up -d --build
 ```
 
-La aplicación estará disponible en: http://localhost:8000
+La aplicación estará disponible en: http://localhost:8001
 
 ## Uso de la API
 
@@ -121,7 +121,7 @@ Content-Type: multipart/form-data
 ### Ejemplo de uso con cURL
 
 ```bash
-curl -X POST "http://localhost:8000/transcribe" \
+curl -X POST "http://localhost:8001/transcribe" \
      -H "X-API-Key: audio-trans-secret-key-2024" \
      -F "file=@tu-archivo.m4a" \
      -F "custom_prompt=Analiza esta transcripción y extrae los puntos clave"
@@ -132,7 +132,7 @@ curl -X POST "http://localhost:8000/transcribe" \
 ```python
 import requests
 
-url = "http://localhost:8000/transcribe"
+url = "http://localhost:8001/transcribe"
 headers = {"X-API-Key": "audio-trans-secret-key-2024"}
 
 files = {"file": open("tu-archivo.m4a", "rb")}
@@ -216,7 +216,7 @@ La aplicación incluye manejo robusto de errores:
 Puedes personalizar cómo OpenAI procesa las transcripciones enviando un `custom_prompt`:
 
 ```bash
-curl -X POST "http://localhost:8000/transcribe" \
+curl -X POST "http://localhost:8001/transcribe" \
      -H "X-API-Key: audio-trans-secret-key-2024" \
      -F "file=@audio.m4a" \
      -F "custom_prompt=Extrae las tareas mencionadas y crea una lista numerada"

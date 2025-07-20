@@ -4,17 +4,18 @@ services:
       context: .
       dockerfile: Dockerfile.prod
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8001}:8001"
     environment:
       - API_KEY=${API_KEY:-audio-trans-secret-key-2024}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - MAX_FILE_SIZE=${MAX_FILE_SIZE:-100MB}
+      - PORT=8001
       - PYTHONUNBUFFERED=1
     volumes:
       - temp_data:/tmp/audiotrans
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 60s
       timeout: 30s
       retries: 5

@@ -34,7 +34,7 @@ echo "API_KEY=$API_KEY"
 echo "OPENAI_API_KEY=sk-proj-tu-openai-key-real-aqui"
 echo "WHISPER_MODEL=medium"
 echo "MAX_FILE_SIZE=200MB"
-echo "PORT=8000"
+echo "PORT=8001"
 echo "========================================"
 
 echo ""
