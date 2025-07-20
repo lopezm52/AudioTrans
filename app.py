@@ -11,6 +11,15 @@ from typing import List
 import logging
 import warnings
 from dotenv import load_dotenv
+import torch
+import psutil
+import gc
+import time
+try:
+    import nvidia_ml_py3 as nvml
+    NVML_AVAILABLE = True
+except ImportError:
+    NVML_AVAILABLE = False
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -18,6 +27,75 @@ load_dotenv()
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ===== GPU CONFIGURATION =====
+# Detectar y configurar dispositivo (GPU/CPU)
+def detect_and_configure_device():
+    """Detecta y configura el mejor dispositivo disponible"""
+    if torch.cuda.is_available():
+        device = "cuda"
+        gpu_count = torch.cuda.device_count()
+        gpu_name = torch.cuda.get_device_name(0) if gpu_count > 0 else "Unknown"
+        logger.info(f"🔥 GPU DETECTADA: {gpu_name} (GPUs disponibles: {gpu_count})")
+        
+        # Configurar memoria GPU
+        if gpu_count > 0:
+            torch.cuda.empty_cache()  # Limpiar caché
+            memory_allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+            memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+            logger.info(f"💾 Memoria GPU: {memory_allocated:.1f}GB usada / {memory_total:.1f}GB total")
+        
+        return device, gpu_name
+    else:
+        logger.info("⚠️  GPU no disponible, usando CPU")
+        return "cpu", "CPU"
+
+# Configurar NVIDIA monitoring si está disponible
+def init_gpu_monitoring():
+    """Inicializa el monitoreo de GPU si está disponible"""
+    if NVML_AVAILABLE:
+        try:
+            nvml.nvmlInit()
+            return True
+        except Exception as e:
+            logger.warning(f"No se pudo inicializar NVML: {e}")
+    return False
+
+def get_gpu_stats():
+    """Obtiene estadísticas de GPU si está disponible"""
+    stats = {"gpu_available": torch.cuda.is_available()}
+    
+    if torch.cuda.is_available():
+        stats.update({
+            "gpu_count": torch.cuda.device_count(),
+            "current_device": torch.cuda.current_device(),
+            "gpu_name": torch.cuda.get_device_name(0),
+            "memory_allocated_gb": round(torch.cuda.memory_allocated(0) / 1024**3, 2),
+            "memory_reserved_gb": round(torch.cuda.memory_reserved(0) / 1024**3, 2),
+        })
+        
+        if NVML_AVAILABLE:
+            try:
+                handle = nvml.nvmlDeviceGetHandleByIndex(0)
+                memory_info = nvml.nvmlDeviceGetMemoryInfo(handle)
+                gpu_util = nvml.nvmlDeviceGetUtilizationRates(handle)
+                stats.update({
+                    "memory_total_gb": round(memory_info.total / 1024**3, 2),
+                    "memory_used_gb": round(memory_info.used / 1024**3, 2),
+                    "memory_free_gb": round(memory_info.free / 1024**3, 2),
+                    "gpu_utilization": gpu_util.gpu,
+                    "memory_utilization": gpu_util.memory
+                })
+            except:
+                pass
+    
+    return stats
+
+# Configurar dispositivo al iniciar
+DEVICE, DEVICE_NAME = detect_and_configure_device()
+GPU_MONITORING = init_gpu_monitoring()
+
+logger.info(f"🎯 Dispositivo configurado: {DEVICE} ({DEVICE_NAME})")
 
 # Silenciar warnings de Whisper sobre FP16/FP32
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
@@ -77,15 +155,35 @@ whisper_model = None
 @app.on_event("startup")
 async def load_whisper_model():
     global whisper_model
-    logger.info(f"Cargando modelo Whisper: {WHISPER_MODEL}")
+    logger.info(f"🚀 Cargando modelo Whisper: {WHISPER_MODEL} en {DEVICE}")
+    
     try:
-        whisper_model = whisper.load_model(WHISPER_MODEL)
-        logger.info(f"Modelo Whisper '{WHISPER_MODEL}' cargado exitosamente")
+        # Cargar modelo Whisper con configuración GPU
+        start_time = time.time()
+        whisper_model = whisper.load_model(WHISPER_MODEL, device=DEVICE)
+        load_time = time.time() - start_time
+        
+        logger.info(f"✅ Modelo Whisper '{WHISPER_MODEL}' cargado exitosamente en {load_time:.2f}s")
+        logger.info(f"🎯 Dispositivo del modelo: {next(whisper_model.parameters()).device}")
+        
+        # Log GPU memory usage after loading model
+        if DEVICE == "cuda":
+            memory_used = torch.cuda.memory_allocated(0) / 1024**3
+            logger.info(f"💾 Memoria GPU después de cargar modelo: {memory_used:.2f}GB")
+        
     except Exception as e:
-        logger.error(f"Error cargando modelo Whisper '{WHISPER_MODEL}': {e}")
-        logger.info("Intentando cargar modelo 'small' como respaldo...")
-        whisper_model = whisper.load_model("small")
-        logger.info("Modelo Whisper 'small' cargado como respaldo")
+        logger.error(f"❌ Error cargando modelo Whisper '{WHISPER_MODEL}': {e}")
+        logger.info("🔄 Intentando cargar modelo 'small' como respaldo...")
+        try:
+            whisper_model = whisper.load_model("small", device=DEVICE)
+            logger.info("✅ Modelo Whisper 'small' cargado como respaldo")
+        except Exception as fallback_error:
+            logger.error(f"❌ Error cargando modelo de respaldo: {fallback_error}")
+            # Último intento con CPU
+            if DEVICE != "cpu":
+                logger.info("🔄 Último intento: cargando en CPU...")
+                whisper_model = whisper.load_model("tiny", device="cpu")
+                logger.info("⚠️ Modelo 'tiny' cargado en CPU como último recurso")
 
 def split_audio(audio_path: str, segment_duration: int = 300) -> List[str]:
     """
@@ -119,29 +217,60 @@ def split_audio(audio_path: str, segment_duration: int = 300) -> List[str]:
 def transcribe_audio_segments(segment_paths: List[str]) -> str:
     """
     Transcribe cada segmento de audio usando Whisper y une las transcripciones
+    Optimizado para GPU con mejor gestión de memoria
     """
     if not whisper_model:
         raise HTTPException(status_code=503, detail="Modelo Whisper no disponible")
     
     transcriptions = []
+    total_segments = len(segment_paths)
+    
+    logger.info(f"🎤 Iniciando transcripción de {total_segments} segmentos")
     
     for i, segment_path in enumerate(segment_paths):
         try:
-            logger.info(f"Transcribiendo segmento {i+1}/{len(segment_paths)}")
-            result = whisper_model.transcribe(segment_path)
+            # Log progreso y estado de memoria
+            logger.info(f"🔄 Transcribiendo segmento {i+1}/{total_segments}")
+            
+            if DEVICE == "cuda":
+                memory_before = torch.cuda.memory_allocated(0) / 1024**3
+                logger.debug(f"💾 Memoria GPU antes del segmento {i+1}: {memory_before:.2f}GB")
+            
+            # Configurar parámetros optimizados para GPU
+            transcribe_options = {
+                "fp16": DEVICE == "cuda",  # Usar FP16 solo en GPU
+                "verbose": False,
+                "word_timestamps": False,  # Desactivar para ahorrar memoria
+            }
+            
+            start_time = time.time()
+            result = whisper_model.transcribe(segment_path, **transcribe_options)
+            transcribe_time = time.time() - start_time
             
             # Verificar que el resultado tenga el formato esperado
             if isinstance(result, dict) and "text" in result:
                 text = result["text"].strip()
                 transcriptions.append(text)
-                logger.info(f"Segmento {i+1} transcrito: {len(text)} caracteres")
+                logger.info(f"✅ Segmento {i+1}: {len(text)} caracteres en {transcribe_time:.2f}s")
             else:
-                logger.warning(f"Formato inesperado en resultado del segmento {i+1}")
+                logger.warning(f"⚠️ Formato inesperado en resultado del segmento {i+1}")
                 transcriptions.append("")  # Agregar texto vacío para mantener orden
+            
+            # Limpiar memoria GPU después de cada segmento
+            if DEVICE == "cuda":
+                torch.cuda.empty_cache()
+                gc.collect()
+                memory_after = torch.cuda.memory_allocated(0) / 1024**3
+                logger.debug(f"🧹 Memoria GPU después del segmento {i+1}: {memory_after:.2f}GB")
                 
         except Exception as e:
-            logger.error(f"Error transcribiendo segmento {i+1}: {e}")
+            logger.error(f"❌ Error transcribiendo segmento {i+1}: {e}")
             transcriptions.append("")  # Agregar texto vacío para mantener orden
+            
+            # Limpiar memoria incluso en caso de error
+            if DEVICE == "cuda":
+                torch.cuda.empty_cache()
+                gc.collect()
     
     # Unir todas las transcripciones en orden, filtrando textos vacíos
     valid_transcriptions = [t for t in transcriptions if t]
@@ -150,6 +279,7 @@ def transcribe_audio_segments(segment_paths: List[str]) -> str:
     if not full_transcription.strip():
         raise HTTPException(status_code=500, detail="No se pudo transcribir ningún segmento de audio")
     
+    logger.info(f"✅ Transcripción completada: {len(valid_transcriptions)}/{total_segments} segmentos exitosos")
     return full_transcription
 
 def cleanup_temp_files(file_paths: List[str]):
@@ -207,14 +337,31 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {
+    gpu_stats = get_gpu_stats()
+    
+    health_info = {
         "status": "healthy", 
         "whisper_model_loaded": whisper_model is not None,
         "whisper_model": WHISPER_MODEL,
+        "device": DEVICE,
+        "device_name": DEVICE_NAME,
         "max_file_size_mb": round(MAX_FILE_SIZE / (1024*1024), 1),
         "api_key_configured": bool(API_KEY),
-        "openai_key_configured": bool(OPENAI_API_KEY)
+        "openai_key_configured": bool(OPENAI_API_KEY),
+        "gpu_stats": gpu_stats,
+        "system_stats": {
+            "cpu_percent": psutil.cpu_percent(),
+            "memory_percent": psutil.virtual_memory().percent,
+            "available_memory_gb": round(psutil.virtual_memory().available / 1024**3, 2)
+        }
     }
+    
+    # Agregar información del modelo si está cargado
+    if whisper_model is not None:
+        model_device = str(next(whisper_model.parameters()).device) if hasattr(whisper_model, 'parameters') else "unknown"
+        health_info["model_device"] = model_device
+    
+    return health_info
 
 @app.post("/transcribe")
 async def transcribe_audio(

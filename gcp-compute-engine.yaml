@@ -1,0 +1,163 @@
+# Google Compute Engine Deployment Configuration
+# For GPU-enabled AudioTrans application
+
+# Instance Template Configuration
+apiVersion: compute/v1
+kind: InstanceTemplate
+metadata:
+  name: audiotrans-gpu-template
+spec:
+  description: "AudioTrans GPU-enabled instance template"
+  
+  # Machine Configuration
+  machineType: "n1-standard-4"  # 4 vCPUs, 15GB RAM
+  
+  # GPU Configuration
+  guestAccelerators:
+    - acceleratorType: "nvidia-tesla-t4"  # T4 GPU (cost-effective)
+      acceleratorCount: 1
+  
+  # Scheduling - Required for GPUs
+  scheduling:
+    onHostMaintenance: "TERMINATE"
+    automaticRestart: true
+    preemptible: false  # Set to true for cost savings if acceptable
+  
+  # Boot Disk
+  disks:
+    - boot: true
+      autoDelete: true
+      initializeParams:
+        sourceImage: "projects/cos-cloud/global/images/family/cos-stable"
+        diskSizeGb: 50
+        diskType: "pd-standard"
+  
+  # Network Configuration
+  networkInterfaces:
+    - network: "global/networks/default"
+      accessConfigs:
+        - name: "External NAT"
+          type: "ONE_TO_ONE_NAT"
+  
+  # Service Account with necessary permissions
+  serviceAccounts:
+    - email: "default"
+      scopes:
+        - "https://www.googleapis.com/auth/cloud-platform"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/monitoring.write"
+  
+  # Container Deployment using Container-Optimized OS
+  metadata:
+    items:
+      - key: "gce-container-declaration"
+        value: |
+          spec:
+            containers:
+              - name: audiotrans-gpu
+                image: gcr.io/YOUR_PROJECT_ID/audiotrans-gpu:latest
+                ports:
+                  - containerPort: 8001
+                    hostPort: 8001
+                    protocol: TCP
+                env:
+                  - name: API_KEY
+                    value: "audio-trans-secret-key-2024"
+                  - name: OPENAI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: openai-api-key
+                        key: key
+                  - name: WHISPER_MODEL
+                    value: "medium"
+                  - name: MAX_FILE_SIZE
+                    value: "200MB"
+                  - name: CUDA_VISIBLE_DEVICES
+                    value: "0"
+                  - name: NVIDIA_VISIBLE_DEVICES
+                    value: "all"
+                  - name: NVIDIA_DRIVER_CAPABILITIES
+                    value: "compute,utility"
+                privileged: false
+                securityContext:
+                  capabilities:
+                    add:
+                      - SYS_NICE  # For GPU scheduling
+                volumeMounts:
+                  - name: whisper-cache
+                    mountPath: /home/appuser/.cache/whisper
+            volumes:
+              - name: whisper-cache
+                hostPath:
+                  path: /var/lib/whisper-cache
+                  type: DirectoryOrCreate
+            restartPolicy: Always
+
+      - key: "google-logging-enabled"
+        value: "true"
+      
+      - key: "google-monitoring-enabled"
+        value: "true"
+
+      # Install NVIDIA drivers on startup
+      - key: "startup-script"
+        value: |
+          #!/bin/bash
+          # Install NVIDIA Container Runtime if not present
+          if ! command -v nvidia-container-runtime &> /dev/null; then
+            echo "Installing NVIDIA Container Runtime..."
+            
+            # Add NVIDIA package repository
+            curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+            distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+            curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+              sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+            
+            # Update and install
+            sudo apt-get update
+            sudo apt-get install -y nvidia-container-runtime
+            
+            # Configure Docker to use NVIDIA runtime
+            sudo systemctl restart docker
+            
+            echo "NVIDIA Container Runtime installed successfully"
+          fi
+          
+          # Verify GPU is accessible
+          nvidia-smi
+          
+          echo "Startup script completed"
+
+---
+# Health Check Configuration
+apiVersion: compute/v1
+kind: HealthCheck
+metadata:
+  name: audiotrans-gpu-health-check
+spec:
+  type: HTTP
+  httpHealthCheck:
+    port: 8001
+    requestPath: "/health"
+  checkIntervalSec: 60
+  timeoutSec: 30
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+
+---
+# Firewall Rule
+apiVersion: compute/v1
+kind: Firewall
+metadata:
+  name: audiotrans-gpu-firewall
+spec:
+  direction: INGRESS
+  priority: 1000
+  allowed:
+    - IPProtocol: tcp
+      ports:
+        - "8001"
+  sourceRanges:
+    - "0.0.0.0/0"  # Adjust for security as needed
+  targetTags:
+    - "audiotrans-gpu" 
